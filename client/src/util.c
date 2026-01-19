@@ -1554,6 +1554,11 @@ inline uint64_t leadingzeros64(uint64_t a) {
 // returns the byte offset the pattern is found at, or -1 if not found
 int byte_strstr(const uint8_t *src, size_t srclen, const uint8_t *pattern, size_t plen) {
 
+    // Guard against invalid inputs that would cause underflow
+    if (plen == 0 || srclen == 0 || plen > srclen) {
+        return -1;
+    }
+
     size_t max = srclen - plen + 1;
 
     for (size_t i = 0; i < max; i++) {
@@ -1568,7 +1573,7 @@ int byte_strstr(const uint8_t *src, size_t srclen, const uint8_t *pattern, size_
         }
 
         // try to match rest of the pattern
-        for (int j = plen - 1; j >= 1; j--) {
+        for (size_t j = plen - 1; j >= 1; j--) {
 
             if (src[i + j] != pattern[j]) {
                 break;
@@ -1586,21 +1591,34 @@ int byte_strstr(const uint8_t *src, size_t srclen, const uint8_t *pattern, size_
 // ie it returns the last occurrence of the pattern in src instead of the first
 // returns the byte offset the pattern is found at, or -1 if not found
 int byte_strrstr(const uint8_t *src, size_t srclen, const uint8_t *pattern, size_t plen) {
-    for (int i = srclen - plen; i >= 0; i--) {
+
+    // Guard against invalid inputs that would cause underflow
+    if (plen == 0 || srclen == 0 || plen > srclen) {
+        return -1;
+    }
+
+    // Safe to compute starting index now that we've validated inputs
+    for (size_t i = srclen - plen + 1; i > 0; i--) {
+        size_t idx = i - 1;  // Actual index (avoids underflow in loop condition)
+
         // compare only first byte
-        if (src[i] != pattern[0]) {
+        if (src[idx] != pattern[0]) {
             continue;
         }
 
-        // try to match rest of the pattern
-        for (int j = plen - 1; j >= 1; j--) {
+        if (plen == 1) {
+            return idx;
+        }
 
-            if (src[i + j] != pattern[j]) {
+        // try to match rest of the pattern
+        for (size_t j = plen - 1; j >= 1; j--) {
+
+            if (src[idx + j] != pattern[j]) {
                 break;
             }
 
             if (j == 1) {
-                return i;
+                return idx;
             }
         }
     }
@@ -1609,8 +1627,14 @@ int byte_strrstr(const uint8_t *src, size_t srclen, const uint8_t *pattern, size
 
 void sb_append_char(smartbuf *sb, unsigned char c) {
     if (sb->idx >= sb->size) {
-        sb->size *= 2;
-        sb->ptr = realloc(sb->ptr, sb->size);
+        size_t new_size = sb->size * 2;
+        char *new_ptr = realloc(sb->ptr, new_size);
+        if (new_ptr == NULL) {
+            // Memory allocation failed - cannot append
+            return;
+        }
+        sb->ptr = new_ptr;
+        sb->size = new_size;
     }
     sb->ptr[sb->idx] = c;
     sb->idx++;

@@ -238,12 +238,26 @@ static int execute_system_command(const char *command) {
     int ret;
 
 #if defined(_WIN32)
-    char wrapped_command[255];
-    strncat(wrapped_command, "cmd /C \"", 9);
-    strncat(wrapped_command, command, strlen(command));
-    strncat(wrapped_command, "\"", 2);
+    // Calculate required buffer size: "cmd /C \"" (8) + command + "\"" (1) + null terminator (1)
+    size_t cmd_len = strlen(command);
+    size_t total_len = 8 + cmd_len + 1 + 1;
 
+    if (total_len > 32768) {  // Windows command line limit
+        pthread_spin_unlock(&sycmd_spinlock);
+        pthread_spin_destroy(&sycmd_spinlock);
+        return -1;
+    }
+
+    char *wrapped_command = (char *)calloc(total_len, sizeof(char));
+    if (wrapped_command == NULL) {
+        pthread_spin_unlock(&sycmd_spinlock);
+        pthread_spin_destroy(&sycmd_spinlock);
+        return -1;
+    }
+
+    snprintf(wrapped_command, total_len, "cmd /C \"%s\"", command);
     ret = system(wrapped_command);
+    free(wrapped_command);
 #else
     ret = system(command);
 #endif
@@ -316,11 +330,13 @@ int CmdsParse(const command_t Commands[], const char *Cmd) {
     str_lower(cmd_name);
 
     // iceman:  I mistyped "list" so many times with "lsit".  No more.
+    // Auto-correct common typo: "lsit" -> "list"
     char *lsit = strstr(cmd_name, "lsit");
     if (lsit) {
-        lsit[1] = lsit[2] ^ lsit[1];
-        lsit[2] = lsit[1] ^ lsit[2];
-        lsit[1] = lsit[2] ^ lsit[1];
+        // Swap characters at positions 1 and 2 to fix typo
+        char tmp = lsit[1];
+        lsit[1] = lsit[2];
+        lsit[2] = tmp;
     }
 
     // Comment

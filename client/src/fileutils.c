@@ -156,8 +156,13 @@ bool setDefaultPath(savePaths_t pathIndex, const char *path) {
 
         size_t len = strlen(path);
 
-        g_session.defaultPaths[pathIndex] = (char *)realloc(g_session.defaultPaths[pathIndex], len + 1);
-        strcpy(g_session.defaultPaths[pathIndex], path);
+        char *new_path = (char *)realloc(g_session.defaultPaths[pathIndex], len + 1);
+        if (new_path == NULL) {
+            PrintAndLogEx(WARNING, "Failed to allocate memory for path");
+            return false;
+        }
+        g_session.defaultPaths[pathIndex] = new_path;
+        memcpy(g_session.defaultPaths[pathIndex], path, len + 1);
         return true;
     }
     return false;
